@@ -1,0 +1,215 @@
+---
+title: "Mathematical Reasoning Test Score Prediction"
+output: html_notebook
+---
+
+
+## Problem Definition
+This article is based on a case study from a quasi-experiment developed by Mukuka et al. (2021), where six public secondary schools from Zambia were analyzed; three were randomly allocated to the experimental group while the other three were allocated to the control group. Students assigned to the control group were taught using an expository instructional approach based on daily lectures and question-and-answer techniques. 
+
+Meanwhile, those assigned to the experimental group were taught using the Student Teams-Achievement Division (STAD) model of cooperative learning, based on students working cooperatively in heterogeneous groups. They are faced with contextualized problems and hands-on activities, and at the end of each topic, a quiz is given to them in which they were not allowed to help one another. In the end, the group with the highest average or that attained the desired performance level earned an award or recognition.
+
+The students’ scores from this study were collected after six weeks of exposure to the different learning methods. Three main results confirm these: Mathematical Reasoning Test (MRT), mathematical reasoning dimensions adequacy (conjecturing, justifying, and mathematizing), and self-efficacy beliefs. 
+
+Firstly, the MRT was a test given to the students prior and posterior to the experiment based on two class topics: quadratic equations and quadratic functions. The MRT posterior to the experiment consisted of 16 test items organized under seven questions. Three mathematical reasoning dimensions conformed these 16 items: conjecturing, justifying, and mathematizing. 
+
+Finally, the students were given a questionnaire prior and posterior to the experiment to measure their mathematics self-efficacy and task-specific self-efficacy beliefs. These scores were based on how often students felt confident to succeed in various aspects of mathematical learning and how confident they were in answering each of the mathematical reasoning questions on quadratic equations and functions, respectively. The student's results can be found on the MR Dataset.sav (available on http://dx.doi.org/10.17632/3472zggczv.1). Demographic variables such as a respondent’s identity, gender, school type, and age have equally been specified in the dataset. 
+
+By making use of this dataset, Mukuka et al. (2021) developed an analysis based on a “Parallel Multiple Mediation Model” where an independent variable, (*group*), was modeled as influencing the dependent variable (*posttest*), both directly and indirectly through two mediators, (*post_efficacy*) and (*post_specific*). Parameters were obtained using the PROCESS custom dialogue version 3.4 embedded in SPPS, resulting in the regression coefficients shown in the figure below. 
+
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/90649106/184549225-1032be6b-0a84-40a7-b093-8787d630a635.png">
+</p>
+
+In this work, we will analyze the efficiency of such model and the satisfiability of the Multiple Linear Regression assumptions: linearity, errors' independence, homoscedasticity, and normality. Furthermore a new model was developed in order to see if its predictability was better than the one developed by Mukuka et al. (2021).
+
+## Data Preparation
+
+First we download the libraries and the dataset that will be occupied.
+```{r setup, include=FALSE}
+# Download Libraries
+knitr::opts_chunk$set(echo = TRUE)
+#devtools::install_github("BfRstats/rriskDistributions")
+library(rriskDistributions)
+library(readxl)
+library(MASS)
+library(tidyr)
+library("car")
+library("asbio")
+library("lmtest")
+library("olsrr")
+library("forecast")
+library("ggplot2")
+library(gvlma)
+library(ggfortify)
+library(lmtest)
+library(dplyr)
+library(orcutt) 
+library(sjmisc)
+library(caret)
+library(boot)
+library(DescTools)
+library(pracma)
+
+# Download Data set
+MR_Dataset <- read_excel("MR_Dataset.xlsx")
+```
+
+Next we deleted variables that would not be occupied in this work, along with observations that contained missing information.
+```{r}
+#Delete unnecessary variables (id) and NAs
+MR_Data <- MR_Dataset[,-1] 
+
+MR_Data <- MR_Data %>% drop_na()
+```
+
+Furthermore, we applied the appropriate transformation to the categorical data. Where we changed all its values to 0 and 1. In addition, we transformed *pre_efficacy*, *post_efficacy*, *pre_specific*, and *post_specific* to numerical values.
+```{r}
+#Create Dummy variables for categorical data
+
+MR_Data$justifying[MR_Data$justifying=="1"] <- 0
+MR_Data$justifying[MR_Data$justifying=="2"] <- 1
+
+MR_Data$mathematising[MR_Data$mathematising=="1"] <- 0
+MR_Data$mathematising[MR_Data$mathematising=="2"] <- 1
+
+MR_Data$conjecturing[MR_Data$conjecturing=="1"] <- 0
+MR_Data$conjecturing[MR_Data$conjecturing=="2"] <- 1
+
+MR_Data$gender[MR_Data$gender=="1"] <- -1
+MR_Data$gender[MR_Data$gender=="2"] <- 1
+
+MR_Data$group[MR_Data$group=="0"] <- -0.5
+MR_Data$group[MR_Data$group=="1"] <- 0.5
+
+sch_type <- to_dummy(MR_Data$sch_type,var.name = "sch_type") #%>% 
+colnames(sch_type) <- c("sch_type1","sch_type2","sch_type3")
+MR_Data <- bind_cols(MR_Data,sch_type)
+
+#Turn Data type of pre_efficacy, post_efficacy, pre_specific, and post_specific to numeric
+MR_Data$pre_efficacy <- as.numeric(gsub(",", ".", gsub("\\.", "", MR_Data$pre_efficacy)))
+MR_Data$post_efficacy <- as.numeric(gsub(",", ".", gsub("\\.", "", MR_Data$post_efficacy)))
+MR_Data$pre_specific <- as.numeric(gsub(",", ".", gsub("\\.", "", MR_Data$pre_specific)))
+MR_Data$post_specific <- as.numeric(gsub(",", ".", gsub("\\.", "", MR_Data$post_specific)))
+```
+
+## Exploratory Data Analysis
+
+Next, we developed an EDA in order to asses the efficiency of the original model, and the one proposed in this work.
+
+### Analysis of Original Model by Mukuka et al. (2021)
+
+First, we performed visualizations that allow us to asses the Multiple Linear Regression (MLR) assumptions, from the original model. Where we conclude the following:
+- *Residuals vs Fitted* plot shows that the model does not follow a constant variance, which means that the plot presents heteroscedasticity. This problem causes the model to have a high risk of generating distortion in the interpretation of results and weakening the overall statistical power of the analysis. In other words, the results of this model have an increased possibility of Type I error and inconsistent F-test results, leading to erroneous conclusions (Aguinis et al., 1999; Osborne & Waters, 2002). 
+- Also, *Residuals vs Fitted* plot shows that there is no linearity since the red line in the plot is not constant in the 0th mark of the *Residuals* axis. This situation causes that the interpretation of the regression coefficients is jeopardized (Darlington & Hayes, 2017).
+- *Normal Q-Q* plot shows that the errors follow in general a normal distribution.
+- *Residuals vs Order* plot shows that there is a dependency of the errors between 140-225 order, leading to an underestimation of standard errors and the labeling variables as statistically significant when not (Keith, 2006). 
+
+```{r}
+original_model <- lm(posttest~post_efficacy+post_specific+group,data=MR_Data)
+plot(original_model)
+plot(original_model$residuals,ylab = "Residuals", xlab = "Order", pch = 19)
+abline(0,0)
+boxplot(original_model$residuals)
+```
+
+#### Coefficient of Partial Determination
+Here we present the measures the marginal contribution of one X variable when all others are already included on the model. Where we conclude the following:
+- When *group* is added to the regression model containing *post_efficacy* and *post_specific* here, the SSE(*post_efficacy*,*post_specific*) is reduced by 13.29%
+- When *post_specific* is added to the regression model containing *post_efficacy* and *group* here, the SSE(*post_efficacy*,*group*) is reduced by 14.13%
+- When *post_efficacy* is added to the regression model containing post_specific and group here, the SSE(*post_specific*,*group*) is reduced by only 1.16%
+```{r}
+#GROUP
+lm.with.group <- original_model
+lm.without.group <- update(original_model, ~. - group)
+partial.R2(lm.without.group,lm.with.group)
+
+#POST_SPECIFIC
+lm.with.post_specific <- original_model
+lm.without.post_specific <- update(original_model, ~. - post_specific)
+partial.R2(lm.without.post_specific,lm.with.post_specific)
+
+#POST_EFFICACY
+lm.with.post_efficacy <- original_model
+lm.without.post_efficacy <- update(original_model, ~. - post_efficacy)
+partial.R2(lm.without.post_efficacy,lm.with.post_efficacy)
+```
+
+Next, we analyze the results of Mukuka's model, along with a VIF and Breusch-Pagan test analysis. The results present that all independent variables are significant except for *post_efficacy*. However the adjusted coefficient of determination is very low, with a value of only 40.99%. 
+
+In terms of multicollinearity problems, the dependent variables do not show such problems. Finally, we analyzed if the model indeed convey hereoscedasticity problems through a Breusch Pagan Test, in which we conclude that with a p-value of 8.555e-10, the model presents hereoscedasticity problems.
+```{r}
+summary(original_model)
+
+vif(original_model)
+
+bptest(original_model)
+```
+
+##### K-fold cross-validation
+K-fold cross-validation was performed, where the results confirm that this model has low coefficient stability with a value of only and a low ability to generalize inferences. Additionally, its Root Mean Square Error (RMSE) conveys that, in general, the model’s prediction of the posttest score is 16.09 points off. Similarly, its Mean Absolute Error showed that, on average, the forecast of this model has a 12.84 point difference from its actual value.
+```{r}
+set.seed(123)
+train_control <- trainControl(method = "cv", number = 10)
+K_folds_original <- train(posttest~post_efficacy+post_specific+group, MR_Data, trControl = train_control, method = "lm")
+print(K_folds_original)
+```
+
+To correct the transgression of assumptions and attain higher predictability on the results of students' *posttest* scores, a new model was developed. 
+
+### Analysis of the Modified Model
+
+For the new model development, we considered that Mukuka et al. (2021) excluded some important post-experiment scores. These correspond to the adequacy of the student's mathematical reasoning dimensions (*conjecturing*, *justifying*, and *mathematizing*). These variables are considered post-treatment moderating variables because they are consequences of the treatment and directly affect the dependent variable (Koschate-Fischer & Schwille, 2018). 
+
+In experimental studies, the omission of a mediator-response confounding factor variable likely leads to an inadequate estimation of the indirect effect (Fritz et al., 2016). Therefore, adding these omitted variables into the model is necessary to avoid this issue. Moreover, we developed a correlation matrix, which shows a high linear association between these moderating variables and the dependent variable, indicating that they are necessary for the model.
+
+```{r}
+# Linear Correlation Analysis
+df <- subset (MR_Data, select = c(posttest,conjecturing,justifying,mathematising,post_efficacy,post_specific))
+res <- cor(df)
+round(res, 2)
+```
+
+Also, we present the results of an hypothesis test that proves that the addition of the competencies is significant for the prediction of the *posttest* result.
+```{r}
+modified_model <- lm(posttest~post_efficacy+post_specific+group+conjecturing+justifying+mathematising,data=MR_Data)
+
+#B4=B5=B4=0
+#B4=B5=B4!=0
+anova(original_model,modified_model)
+```
+
+
+Now, we perform the same visualizations and tests as before, but adding *conjecturing*, *justifying*, and *mathematising* competencies to the original model.
+
+For the assumptions analysis we conclude the following:
+- *Residuals vs Fitted* plot shows that the model does follow a constant variance.
+- Also, *Residuals vs Fitted* plot shows that there is better linearity than in the original model since the red line appears to be more constant in the 0th mark of the *Residuals* axis.
+- *Normal Q-Q* plot shows that the errors follow in general a normal distribution.
+- *Residuals vs Order* plot shows that there is no dependency of the errors.
+```{r}
+plot(modified_model)
+plot(modified_model$residuals,ylab = "Residuals", pch = 19)
+abline(0,0)
+boxplot(modified_model$residuals)
+```
+This model presents that all independent variables are significant except for *post_efficacy*. Furthermore, the adjusted coefficient of determination is higher, with a value of 84.84%. Moreover, the RSE is of 8.08 units, 7.86 units less than in the original model. 
+
+In terms of multicollinearity, all dependent variables do not show such issue.
+```{r}
+summary(modified_model)
+
+vif(modified_model)
+```
+##### K-fold cross-validation
+Additionally, the robustness of the regression is tested by performing K-fold cross-validation. The results conveyed a higher coefficient of determination $R^2$ of 84.80% compared to the original model of 40.84%. Also, the RMSE and MAE resulted in lower values from the original model.
+```{r}
+set.seed(123)
+train_control <- trainControl(method = "cv", number = 10)
+K_folds_competencies <- train(posttest~post_efficacy+post_specific+group+conjecturing+justifying+mathematising, MR_Data, trControl = train_control,method = "lm")
+print(K_folds_competencies)
+```
+
+## Conclusion
+The initial mediation analysis was modified so that the students’ Mathematical Reasoning Dimensions adequacy (*conjecturing*, *justifying*, and *mathematising*) were included as variables that directly influence the post-test score. The findings of this study revealed that the inclusion of such factors increases $R^2$ while decreasing MAE and MSE; which means that teachers must focus in improving students’ conjecturing, justifying, and mathematising skills while applying the STAD model of cooperative learning. With this students will have a better probability of attaining a higher score in the final test.
+
