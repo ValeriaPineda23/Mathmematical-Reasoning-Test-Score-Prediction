@@ -64,7 +64,7 @@ Additionally, the robustness of the regression is tested by performing K-fold cr
   <img src="https://user-images.githubusercontent.com/90649106/184549825-136c8cf5-4e5e-4c25-a920-ab9695e52000.png">
 </p>
 
-Finally, the multiple linear regression model assumptions were tested and compared to the original model. Table 7 shows that by adding the Mathematical Reasoning Dimensions into the model, the assumptions of homoscedasticity and independence of error are met. This result leads us to conclude that the modified model has significantly lower distortions on the findings, higher stability in the results, and a higher ability to predict posttest scores.
+Finally, the multiple linear regression model assumptions were tested and compared to the original model. Table below shows that by adding the Mathematical Reasoning Dimensions into the model, the assumptions of homoscedasticity and independence of error are met. This result leads us to conclude that the modified model has significantly lower distortions on the findings, higher stability in the results, and a higher ability to predict posttest scores.
 
 <p align="center">
   <img src="https://user-images.githubusercontent.com/90649106/184549873-44df3f58-c31c-4efb-8ff0-137214e1e307.png">
